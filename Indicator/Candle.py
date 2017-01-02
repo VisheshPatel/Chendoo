@@ -13,6 +13,9 @@ Created on Dec 31, 2016
     
 '''
 
+GREEN = 'G'
+RED = 'R'
+
 
 class Interval(object):
     MIN = 1 * 60    # 60 second
@@ -38,7 +41,7 @@ class Candle(object):
         self.openP = openP
         self.volume = volume
 
-        self.color = "G" if closeP - openP > 0.0 else "R"
+        self.color = GREEN if closeP - openP > 0.0 else RED
         self.precentageChange = 0.0
 
     def __repr__(self):

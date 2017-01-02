@@ -14,18 +14,23 @@ class Share:
     symbol = None               # Company Symbol Name
     currentPrice = None         # Current Price Updated Every Second
     GOOGLEdata = GoogleFinance.GOOGLEdata()  # Communicator Mediator
-    prevNthDayCandles = []      # List of Candle
-    prevNthPeriodCandles = []
+    prevNDayCandles = []      # List of N Candle
+    prevNPeriodCandles = []     # List of N period candle
     prevDayCls = 0.0
+    averageFluctuationOfDay = 0.0
+    pip = 0.0                   # Average one day fluctuation / 100
 
     def __init__(self, symbol, candlePeriod=60):
         " Initialize symbol, previous 30 day data, previous day close"
         self.symbol = symbol
-        self.prevNthDayCandles = self.get_previous_Nth_day_candle(day=30)
+        self.prevNDayCandles = self.get_previous_Nth_day_candle(day=30)
+        self.averageFluctuationOfDay = self.get_average_fluctuation_of_N_day(
+            N=30)
+        self.pip = self.averageFluctuationOfDay / 100
 
         try:
             # In case there is empty list
-            self.prevDayCls = self.prevNthDayCandles[-1].closeP
+            self.prevDayCls = self.prevNDayCandles[-1].closeP
         except:
             print "Unable to update previous day close price"
 
@@ -40,8 +45,8 @@ class Share:
     def get_prev_day_close(self):
         return self.prevDayCls
 
-    def get_prev_Nth_preriod_candle(self):
-        return self.prevNthPeriodCandles
+    def get_prev_N_period_candle(self):
+        return self.prevNPeriodCandles
 
     def get_current_price(self):
         dataStr = None
@@ -92,7 +97,7 @@ class Share:
         " Get the candle of specified date"
         if day == 0:
             print "returning already filled list"
-            return self.prevNthDayCandles
+            return self.prevNDayCandles
 
         candleList = []
 
@@ -126,8 +131,24 @@ class Share:
         " Thread function to update candle list every time interval"
 
         while True:
-            print "updating ", self.symbol, " candle list"
+            print "updating ", self.symbol, " candle list every minute"
             candle = self.get_updated_candle(interval=Candle.Interval.MIN)
 
-            self.prevNthPeriodCandles.append(candle)
+            self.prevNPeriodCandles.append(candle)
             time.sleep(timeInterval - 0.01)
+
+    def get_average_fluctuation_of_N_day(self, N=30):
+        " Average of 30 day max movement "
+        sumOfNDayFluctuation = 0.0
+
+        for i, candle in enumerate(self.prevNDayCandles):
+            sumOfNDayFluctuation += abs(candle.highP - candle.lowP)
+            if i == N - 1:
+                break
+
+        oneDayFluctuation = sumOfNDayFluctuation / N
+
+        return oneDayFluctuation
+
+    def get_pip(self):
+        return self.pip

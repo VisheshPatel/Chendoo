@@ -5,34 +5,44 @@ Created on Dec 25, 2016
 import Equity
 import datetime
 import time
+import sys
+import threading
 import schedule
 from Communicator import NSE
 from Indicator import Candle
-from Strategy import HeikinAshi
 
-virtualMoney = 5000
+now = datetime.datetime.now()
+#MARKET_START_TIME = "9:15"
+MARKET_START_TIME = "{}:{}".format(now.hour,now.minute+1)
+print MARKET_START_TIME
+VIRTUAL_MONEY = 5000
 
 
-def App():
-    print "App Started"
-    SBI = Equity.Share("SBIN")
-    SBIHeikinAshi = HeikinAshi.HeikinAshi(SBI)
+def startApp(schedulerMsg):
+    print schedulerMsg
+    SUNPHARMA = Equity.Share("SUNPHARMA")
+
+    time.sleep(60*4)    # 4 Minute sleep to acquire 4 candles for heikinashi strategy
 
     greenCandleCnt = 0
-    for candle in SBIHeikinAshi.get_updated_N_HeikinAshi_candle(N=4):
+    for candle in SUNPHARMA.get_updated_N_HeikinAshi_candle(N=4):
         if candle.color == Candle.GREEN:
             greenCandleCnt += 1
             pass
+        
+        
 
-SBI = Equity.Share("SBIN")
+def stopApp(schedulerMsg):
+    print schedulerMsg
+    sys.exit(0)
+    
+schedule.every().day.at(MARKET_START_TIME).do( startApp, 'App Started')
+schedule.every().day.at(MARKET_START_TIME).do( stopApp, 'App Stopped')
 
-print SBI.get_average_fluctuation_of_N_day()
-print SBI.get_pip()
-# for candle in SBI.get_previous_Nth_day_candle(day=5):
-#    print candle
+while True:    
+    schedule.run_pending()
+    time.sleep(60)
 
-while True:
-    print "".center(120, "*")
-    # SBI.get_previous_Nth_day_candle(day=5)
-    print "".center(120, "*")
-    time.sleep(61)
+
+if __name__ == "__main__":
+    pass

@@ -14,11 +14,17 @@ class Share:
     symbol = None               # Company Symbol Name
     currentPrice = None         # Current Price Updated Every Second
     GOOGLEdata = GoogleFinance.GOOGLEdata()  # Communicator Mediator
-    prevNDayCandles = []      # List of N Candle
+    prevNDayCandles = []        # List of N Candle
     prevNPeriodCandles = []     # List of N period candle
     prevDayCls = 0.0
     averageFluctuationOfDay = 0.0
     pip = 0.0                   # Average one day fluctuation / 100
+    
+    buyPrice = None
+    sellPrice = None
+    stopLoss = None
+    qauntity = None
+    
 
     def __init__(self, symbol, candlePeriod=60):
         " Initialize symbol, previous 30 day data, previous day close"
@@ -34,14 +40,11 @@ class Share:
         except:
             print "Unable to update previous day close price"
 
-        try:
-            # update candle list on every 1 minute
-            t1 = threading.Thread(
-                target=self.update_candle_list_thread, args=(candlePeriod,))
-            t1.start()
-        except:
-            print "Unable to start candle thread"
-
+        # update candle list on every 1 minute
+        self.update_candle_list_thread(
+            timeIntervalToUpdateList=60, candleInterval=Candle.Interval.MIN)
+        
+      
     def get_prev_day_close(self):
         return self.prevDayCls
 
@@ -127,22 +130,79 @@ class Share:
 
         return candleList
 
-    def update_candle_list_thread(self, timeInterval):
+    def update_candle_list_thread(self, timeIntervalToUpdateList, candleInterval):
         " Thread function to update candle list every time interval"
+        candle = self.get_updated_candle(interval=candleInterval)
+        if candle != None:
+            print "updating", self.symbol, "candle list"    
+        
+        # Check for duplicate candle
+        if self.prevNPeriodCandles != []:
+            lastCandle = self.prevNPeriodCandles[len(self.prevNPeriodCandles)-1]
+            if candle != lastCandle:    
+                candle.no = lastCandle.no + 1
+                self.prevNPeriodCandles.append(candle)
+        else:
+            candle.no = 0
+            self.prevNPeriodCandles.append(candle)        
 
-        while True:
-            print "updating ", self.symbol, " candle list every minute"
-            candle = self.get_updated_candle(interval=Candle.Interval.MIN)
+        # Schedule for next candle
+        threading.Timer(
+            timeIntervalToUpdateList - 0.01, self.update_candle_list_thread, [timeIntervalToUpdateList, candleInterval]).start()
 
-            self.prevNPeriodCandles.append(candle)
-            time.sleep(timeInterval - 0.01)
+    def buy_and_sell(self, buyPrice=None, sellPrice=None, qauntity = 1, stopLoss=None, isSquareOff=False):
+        isStartStopLossHandler = False        
+        # First buy
+        if self.buyPrice == None and buyPrice != None and isSquareOff == False:
+            self.buyPrice = buyPrice
+            self.stopLoss = stopLoss
+            self.qauntity = qauntity
+            isStartStopLossHandler = True
+        # First sell    
+        elif self.sellPrice == None and sellPrice != None and isSquareOff == False :    
+            self.sellPrice = sellPrice
+            self.stopLoss = stopLoss
+            self.qauntity = qauntity
+            isStartStopLossHandler = True
+        # Square off already bought/sold
+        else:
+            # Sell, already bought
+            if self.buyPrice != None :
+                self.sellPrice = sellPrice
+            # Buy, already sold
+            else:
+                self.buyPrice = buyPrice
+            isStartStopLossHandler = False
+            
+            # get profit/loss entry
+            "".center(150,"-")
+            print "Buy =",self.buyPrice," Sell =", self.sellPrice," Quantity =", self.qauntity," P&L = ",self.sellPrice-self.buyPrice
+            "".center(150,"-")
+            # NULL all data
+            self.buyPrice=self.sellPrice=self.stopLoss=self.qauntity=None
+            
+        self.stop_loss_handler_thread( isStartStopLossHandler, timeInterval=5)
+            
+    def stop_loss_handler_thread(self, timeInterval=5, isStartStopLossHandler=True):
+        " Thread function to watch stop loss hit every time interval"
+        if isStartStopLossHandler == False:
+            return
+
+        currPrice = self.get_current_price()
+        
+        if (currPrice+self.pip) >= self.stopLoss and self.stopLoss >= (currPrice-self.pip) :
+            # Square Off
+            self.buy_and_sell(isSquareOff=True)
+        else:
+            threading.Timer(
+                timeInterval - 0.01, self.stop_loss_handler_thread, [timeInterval, isStartStopLossHandler]).start()
 
     def get_average_fluctuation_of_N_day(self, N=30):
         " Average of 30 day max movement "
         sumOfNDayFluctuation = 0.0
 
         for i, candle in enumerate(self.prevNDayCandles):
-            sumOfNDayFluctuation += abs(candle.highP - candle.lowP)
+            sumOfNDayFluctuation += candle.maxFluctuation
             if i == N - 1:
                 break
 
@@ -152,3 +212,46 @@ class Share:
 
     def get_pip(self):
         return self.pip
+
+    # TODO repair sequence problem
+    def get_updated_N_HeikinAshi_candle(self, N=4):
+        '''
+            - We consider only last(recent) N candles
+        '''
+        noOfCandles = len(self.prevNPeriodCandle)
+        
+        if noOfCandles < N:
+            print "There is no enough candle you requested"
+            return []
+        
+        print "noOfCandles\t=", noOfCandles
+        prevNHeinkinAshiCandles = []
+        prevNPeriodCandles = self.prevNPeriodCandles[noOfCandles-N : ]
+        
+        if len(prevNPeriodCandles) == N:
+            print "=========================================get requested candles"
+        
+        normalPrevCandle = prevNPeriodCandles[0]
+        
+        for normalCurrCandle in prevNPeriodCandles:
+            
+            heikinAshiCandle = Candle.Candle(
+                date=time.strftime("%d-%m-%Y", time.gmtime()),
+                time=time.strftime("%H:%M:%S", time.gmtime()),
+                closeP=(normalCurrCandle.openP + normalCurrCandle.highP +
+                        normalCurrCandle.lowP + normalCurrCandle.closeP) / 4,
+                highP=max(
+                    normalCurrCandle.openP, normalCurrCandle.highP, normalCurrCandle.closeP),
+                lowP=min(
+                    normalCurrCandle.openP, normalCurrCandle.lowP, normalCurrCandle.closeP),
+                openP=(normalPrevCandle.openP + normalPrevCandle.closeP) / 2,
+                volume=normalCurrCandle.volume,
+                timeFrame=normalCurrCandle.timeFrame)
+
+            #print "Normal Candle\t=", normalCurrCandle
+            #print "Heikin Ashi\t=", heikinAshiCandle
+            prevNHeinkinAshiCandles.append(heikinAshiCandle)
+            
+            normalPrevCandle = normalCurrCandle
+            
+        return prevNHeinkinAshiCandles

@@ -14,7 +14,6 @@ from Communicator import URL
 
 class GOOGLEdata:
     " Extract Data From Google Finance Server "
-    " Limitation Here Is, You Can Only Get Previous 15 Day Data"
 
     def __init__(self):
         pass

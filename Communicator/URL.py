@@ -3,6 +3,7 @@ Created on Dec 24, 2016
 @author: Vishal Chovatiya
 '''
 import requests
+import sys
 
 
 class URLprocessor:
@@ -25,6 +26,7 @@ class URLprocessor:
             res = requests.get(url, headers=None)
         except requests.ConnectionError:
             print "Error: Check For Internet Connection"
+            sys.exit(2)
         except requests.Timeout:
             print "Error: Request Time-Out"
         else:
